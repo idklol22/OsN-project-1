@@ -54,9 +54,9 @@ int lex(const char *line, tok_list *out)
         if (ch == '\\') {
             char nx = *(p + 1);
             if (nx == '\0' || nx == '\n') {
-                printf("Invalid Syntax!\n");
-                fflush(stdout);
+                fprintf(stderr, "cshell: invalid syntax\n");
                 free(wb);
+                tl_free(out);
                 return -1;
             }
             inword = 1;
@@ -73,9 +73,9 @@ int lex(const char *line, tok_list *out)
                 p++;
             }
             if (*p != '\'') {
-                printf("Invalid Syntax!\n");
-                fflush(stdout);
+                fprintf(stderr, "cshell: invalid syntax\n");
                 free(wb);
+                tl_free(out);
                 return -1;
             }
             p++;
@@ -101,9 +101,9 @@ int lex(const char *line, tok_list *out)
                 }
             }
             if (*p != '"') {
-                printf("Invalid Syntax!\n");
-                fflush(stdout);
+                fprintf(stderr, "cshell: invalid syntax\n");
                 free(wb);
+                tl_free(out);
                 return -1;
             }
             p++;

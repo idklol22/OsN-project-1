@@ -40,8 +40,7 @@ static int do_arg(cmd *cur);
 static int do_tgt(cmd *cur, int mode)
 {
     if (pk()->type != tok_word) {
-        printf("Invalid Syntax!\n");
-        fflush(stdout);
+        fprintf(stderr, "cshell: invalid syntax\n");
         return -1;
     }
     tok *t = eat();
@@ -91,16 +90,14 @@ static int do_arg(cmd *cur)
         return 0;
     }
 
-    printf("Invalid Syntax!\n");
-    fflush(stdout);
+    fprintf(stderr, "cshell: invalid syntax\n");
     return -1;
 }
 
 static cmd *do_cmd(void)
 {
     if (pk()->type != tok_word) {
-        printf("Invalid Syntax!\n");
-        fflush(stdout);
+        fprintf(stderr, "cshell: invalid syntax\n");
         return NULL;
     }
     cmd *c = mkc();
@@ -113,8 +110,7 @@ static cmd *do_bg(void)
 {
     if (pk()->type == tok_eof) return NULL;
     if (pk()->type != tok_word) {
-        printf("Invalid Syntax!\n");
-        fflush(stdout);
+        fprintf(stderr, "cshell: invalid syntax\n");
         return (cmd *)-1;
     }
     cmd *c = mkc();
@@ -131,8 +127,7 @@ cmd *parse(tok_list *tl)
     if (pk()->type == tok_eof) return NULL;
 
     if (pk()->type != tok_word) {
-        printf("Invalid Syntax!\n");
-        fflush(stdout);
+        fprintf(stderr, "cshell: invalid syntax\n");
         return NULL;
     }
 
