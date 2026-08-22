@@ -106,8 +106,8 @@ static int hop_single(const char *arg) {
     if (!getcwd(cur, sizeof(cur))) return -1;
     char target_dir[PATH_MAX];
 
-    if (strcmp(arg, "~") == 0 || arg[0] == '\0') {
-        strncpy(target_dir, home_dir, PATH_MAX - 1);
+    if (arg[0] == '~' && (arg[1] == '\0' || arg[1] == '/')) {
+        snprintf(target_dir, sizeof(target_dir), "%s%s", home_dir, arg + 1);
     } else if (strcmp(arg, ".") == 0) {
         return 0;
     } else if (strcmp(arg, "..") == 0) {

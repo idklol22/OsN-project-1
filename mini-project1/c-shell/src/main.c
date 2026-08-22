@@ -6,8 +6,10 @@
 #include "lexer.h"
 #include "parser.h"
 #include "hop.h"
+#include "reveal.h"
+#include "peek.h"
 
-static char homedir[PATH_MAX];
+char homedir[PATH_MAX];
 
 static void print_prompt(void)
 {
@@ -50,6 +52,14 @@ static int dispatch(cmd *c)
     if (!c || c->argc == 0) return 0;
     if (strcmp(c->argv[0], "hop") == 0) {
         do_hop(c->argv, c->argc);
+        return 1;
+    }
+    if (strcmp(c->argv[0], "reveal") == 0) {
+        do_reveal(c->argv, c->argc);
+        return 1;
+    }
+    if (strcmp(c->argv[0], "peek") == 0) {
+        do_peek(c->argv, c->argc);
         return 1;
     }
     return 0;
