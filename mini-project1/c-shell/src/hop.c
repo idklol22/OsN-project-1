@@ -146,7 +146,7 @@ static int hop_single(const char *arg) {
 }
 
 int do_hop(char **a, int c) {
-    if (c == 0) {
+    if (c <= 1) {
         return hop_single("~");
     }
     for (int i = 1; i < c; i++) {
