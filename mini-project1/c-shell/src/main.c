@@ -5,6 +5,7 @@
 #include <limits.h>
 #include "lexer.h"
 #include "parser.h"
+#include "hop.h"
 
 static char homedir[PATH_MAX];
 
@@ -44,12 +45,24 @@ static void print_prompt(void)
     fflush(stdout);
 }
 
+static int dispatch(cmd *c)
+{
+    if (!c || c->argc == 0) return 0;
+    if (strcmp(c->argv[0], "hop") == 0) {
+        do_hop(c->argv, c->argc);
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (!getcwd(homedir, sizeof(homedir))) {
         perror("getcwd");
         return 1;
     }
+
+    hop_init(homedir);
 
     char line[shell_inmax];
 
@@ -72,8 +85,12 @@ int main(void)
 
         cmd *cmds = parse(&tl);
         tl_free(&tl);
-        if (cmds)
-            cmds_free(cmds);
+        if (!cmds) continue;
+
+        if (!dispatch(cmds)) {
+        }
+
+        cmds_free(cmds);
     }
 
     return 0;
