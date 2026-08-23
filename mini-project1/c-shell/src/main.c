@@ -8,6 +8,7 @@
 #include "hop.h"
 #include "reveal.h"
 #include "peek.h"
+#include "locate.h"
 
 char homedir[PATH_MAX];
 
@@ -60,6 +61,10 @@ static int dispatch(cmd *c)
     }
     if (strcmp(c->argv[0], "peek") == 0) {
         do_peek(c->argv, c->argc);
+        return 1;
+    }
+    if (strcmp(c->argv[0], "locate") == 0) {
+        do_locate(c->argv, c->argc);
         return 1;
     }
     return 0;
