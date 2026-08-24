@@ -9,6 +9,7 @@
 #include "reveal.h"
 #include "peek.h"
 #include "locate.h"
+#include "exec.h"
 
 char homedir[PATH_MAX];
 
@@ -48,28 +49,6 @@ static void print_prompt(void)
     fflush(stdout);
 }
 
-static int dispatch(cmd *c)
-{
-    if (!c || c->argc == 0) return 0;
-    if (strcmp(c->argv[0], "hop") == 0) {
-        do_hop(c->argv, c->argc);
-        return 1;
-    }
-    if (strcmp(c->argv[0], "reveal") == 0) {
-        do_reveal(c->argv, c->argc);
-        return 1;
-    }
-    if (strcmp(c->argv[0], "peek") == 0) {
-        do_peek(c->argv, c->argc);
-        return 1;
-    }
-    if (strcmp(c->argv[0], "locate") == 0) {
-        do_locate(c->argv, c->argc);
-        return 1;
-    }
-    return 0;
-}
-
 int main(void)
 {
     if (!getcwd(homedir, sizeof(homedir))) {
@@ -102,11 +81,11 @@ int main(void)
         tl_free(&tl);
         if (!cmds) continue;
 
-        if (!dispatch(cmds)) {
-        }
+        do_exec(cmds);
 
         cmds_free(cmds);
     }
 
     return 0;
 }
+
