@@ -11,6 +11,7 @@
 #include "reveal.h"
 #include "peek.h"
 #include "locate.h"
+#include "jobs.h"
 
 static int find_exec(char *name, char *out, size_t sz)
 {
@@ -66,10 +67,11 @@ static int is_builtin(char *name)
     if (strcmp(name, "reveal") == 0) return 1;
     if (strcmp(name, "peek") == 0) return 1;
     if (strcmp(name, "locate") == 0) return 1;
+    if (strcmp(name, "activities") == 0) return 1;
     return 0;
 }
 
-static int run_pipeline(cmd **g, int n)
+static int run_pipeline(cmd **g, int n, int bg)
 {
     if (n <= 0) return 0;
 
@@ -108,13 +110,21 @@ static int run_pipeline(cmd **g, int n)
         }
     }
 
-    if (n == 1 && strcmp(g[0]->argv[0], "hop") == 0) {
+    if (!bg && n == 1 && strcmp(g[0]->argv[0], "hop") == 0) {
         do_hop(g[0]->argv, g[0]->argc);
+        return 0;
+    }
+
+    if (!bg && n == 1 && strcmp(g[0]->argv[0], "activities") == 0) {
+        jobs_print_activities();
         return 0;
     }
 
     int prev_fd = -1;
     pid_t *pids = malloc((size_t)n * sizeof(pid_t));
+    char **first_cmds = malloc((size_t)n * sizeof(char *));
+
+    pid_t pgid = 0;
 
     for (int i = 0; i < n; i++) {
         int pipefd[2] = {-1, -1};
@@ -122,6 +132,7 @@ static int run_pipeline(cmd **g, int n)
             if (pipe(pipefd) < 0) {
                 perror("pipe");
                 free(pids);
+                free(first_cmds);
                 return -1;
             }
         }
@@ -130,10 +141,22 @@ static int run_pipeline(cmd **g, int n)
         if (pid < 0) {
             perror("fork");
             free(pids);
+            free(first_cmds);
             return -1;
         }
 
         if (pid == 0) {
+            if (pgid == 0) pgid = getpid();
+            setpgid(0, pgid);
+
+            if (bg) {
+                int devnull = open("/dev/null", O_RDONLY);
+                if (devnull >= 0) {
+                    dup2(devnull, STDIN_FILENO);
+                    close(devnull);
+                }
+            }
+
             if (prev_fd != -1) {
                 dup2(prev_fd, STDIN_FILENO);
                 close(prev_fd);
@@ -173,9 +196,8 @@ static int run_pipeline(cmd **g, int n)
                                 if (fd >= 0) {
                                     char buf[1024];
                                     ssize_t nr;
-                                    while ((nr = read(fd, buf, sizeof(buf))) > 0) {
+                                    while ((nr = read(fd, buf, sizeof(buf))) > 0)
                                         write(pfd[1], buf, (size_t)nr);
-                                    }
                                     close(fd);
                                 }
                             }
@@ -212,9 +234,8 @@ static int run_pipeline(cmd **g, int n)
                         char buf[1024];
                         ssize_t nr;
                         while ((nr = read(pfd[0], buf, sizeof(buf))) > 0) {
-                            for (int k = 0; k < n_fds; k++) {
+                            for (int k = 0; k < n_fds; k++)
                                 write(fds[k], buf, (size_t)nr);
-                            }
                         }
                         for (int k = 0; k < n_fds; k++) close(fds[k]);
                         close(pfd[0]);
@@ -238,35 +259,39 @@ static int run_pipeline(cmd **g, int n)
             }
 
             if (strcmp(curr->argv[0], "reveal") == 0) {
-                int r = do_reveal(curr->argv, curr->argc);
-                exit(r == 0 ? 0 : 1);
+                exit(do_reveal(curr->argv, curr->argc) == 0 ? 0 : 1);
             }
             if (strcmp(curr->argv[0], "peek") == 0) {
-                int r = do_peek(curr->argv, curr->argc);
-                exit(r == 0 ? 0 : 1);
+                exit(do_peek(curr->argv, curr->argc) == 0 ? 0 : 1);
             }
             if (strcmp(curr->argv[0], "locate") == 0) {
-                int r = do_locate(curr->argv, curr->argc);
-                exit(r == 0 ? 0 : 1);
+                exit(do_locate(curr->argv, curr->argc) == 0 ? 0 : 1);
             }
             if (strcmp(curr->argv[0], "hop") == 0) {
-                int r = do_hop(curr->argv, curr->argc);
-                exit(r == 0 ? 0 : 1);
+                exit(do_hop(curr->argv, curr->argc) == 0 ? 0 : 1);
+            }
+            if (strcmp(curr->argv[0], "activities") == 0) {
+                jobs_print_activities();
+                exit(0);
             }
 
             char runpath[2048];
             find_exec(curr->argv[0], runpath, sizeof(runpath));
 
-            if (curr->argv[0][0] == '%' && !strchr(curr->argv[0], '/')) {
+            if (curr->argv[0][0] == '%' && !strchr(curr->argv[0], '/'))
                 curr->argv[0] = curr->argv[0] + 1;
-            }
 
             execv(runpath, curr->argv);
             perror("execv");
             exit(1);
         }
 
+        if (pgid == 0) pgid = pid;
+        setpgid(pid, pgid);
+
         pids[i] = pid;
+        first_cmds[i] = g[i]->argv[0];
+
         if (prev_fd != -1) close(prev_fd);
         if (i < n - 1) {
             close(pipefd[1]);
@@ -274,12 +299,19 @@ static int run_pipeline(cmd **g, int n)
         }
     }
 
-    for (int i = 0; i < n; i++) {
-        int st;
-        waitpid(pids[i], &st, 0);
+    if (bg) {
+        int jid = jobs_add(pgid, pids, first_cmds, n);
+        printf("[%d] %d\n", jid, (int)pids[0]);
+        fflush(stdout);
+    } else {
+        for (int i = 0; i < n; i++) {
+            int st;
+            waitpid(pids[i], &st, 0);
+        }
     }
 
     free(pids);
+    free(first_cmds);
     return 0;
 }
 
@@ -289,12 +321,16 @@ int do_exec(cmd *c)
 
     cmd *cur = c;
     while (cur) {
+        int is_bg = 0;
         cmd *pipe_start = cur;
         int n = 0;
         cmd *p = cur;
         while (p) {
             n++;
-            if (p->sep != sep_pipe) break;
+            if (p->sep != sep_pipe) {
+                if (p->sep == sep_amp) is_bg = 1;
+                break;
+            }
             p = p->nxt;
         }
 
@@ -307,10 +343,10 @@ int do_exec(cmd *c)
             t = t->nxt;
         }
 
-        int ret = run_pipeline(g, n);
+        int ret = run_pipeline(g, n, is_bg);
         free(g);
 
-        if (ret != 0) {
+        if (!is_bg && ret != 0) {
             return -1;
         }
 

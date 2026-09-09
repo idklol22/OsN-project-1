@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <signal.h>
 #include "lexer.h"
 #include "parser.h"
 #include "hop.h"
@@ -10,6 +11,7 @@
 #include "peek.h"
 #include "locate.h"
 #include "exec.h"
+#include "jobs.h"
 
 char homedir[PATH_MAX];
 
@@ -49,6 +51,12 @@ static void print_prompt(void)
     fflush(stdout);
 }
 
+static void sigchld_handler(int sig)
+{
+    (void)sig;
+    jobs_reap();
+}
+
 int main(void)
 {
     if (!getcwd(homedir, sizeof(homedir))) {
@@ -57,6 +65,13 @@ int main(void)
     }
 
     hop_init(homedir);
+    jobs_init();
+
+    struct sigaction sa;
+    sa.sa_handler = sigchld_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    sigaction(SIGCHLD, &sa, NULL);
 
     char line[shell_inmax];
 
@@ -88,4 +103,3 @@ int main(void)
 
     return 0;
 }
-
