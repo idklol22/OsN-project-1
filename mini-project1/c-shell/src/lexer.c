@@ -11,7 +11,7 @@ static int tl_push(tok_list *tl, tok_type type, char *val)
         if (!tl->data) return -1;
     }
     tl->data[tl->n].type = type;
-    tl->data[tl->n].val  = val ? strdup(val) : NULL;
+    tl->data[tl->n].val  = (type == tok_word) ? (val ? strdup(val) : strdup("")) : (val ? strdup(val) : NULL);
     tl->n++;
     return 0;
 }
@@ -67,6 +67,7 @@ int lex(const char *line, tok_list *out)
 
         if (ch == '\'') {
             inword = 1;
+            if (!wb) { wb_push(&wb, &wlen, &wcap, '\0'); wlen = 0; }
             p++;
             while (*p && *p != '\'') {
                 wb_push(&wb, &wlen, &wcap, *p);
@@ -84,6 +85,7 @@ int lex(const char *line, tok_list *out)
 
         if (ch == '"') {
             inword = 1;
+            if (!wb) { wb_push(&wb, &wlen, &wcap, '\0'); wlen = 0; }
             p++;
             while (*p && *p != '"') {
                 if (*p == '\\' && *(p + 1) != '\0') {
