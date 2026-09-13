@@ -13,6 +13,7 @@
 #include "locate.h"
 #include "jobs.h"
 #include "resume.h"
+#include "ping.h"
 
 static int find_exec(char *name, char *out, size_t sz)
 {
@@ -70,6 +71,7 @@ static int is_builtin(char *name)
     if (strcmp(name, "locate") == 0) return 1;
     if (strcmp(name, "activities") == 0) return 1;
     if (strcmp(name, "resume") == 0) return 1;
+    if (strcmp(name, "ping") == 0) return 1;
     return 0;
 }
 
@@ -124,6 +126,11 @@ static int run_pipeline(cmd **g, int n, int bg)
 
     if (!bg && n == 1 && strcmp(g[0]->argv[0], "resume") == 0) {
         do_resume(g[0]->argv, g[0]->argc);
+        return 0;
+    }
+
+    if (!bg && n == 1 && strcmp(g[0]->argv[0], "ping") == 0) {
+        do_ping(g[0]->argv, g[0]->argc);
         return 0;
     }
 
@@ -289,6 +296,9 @@ static int run_pipeline(cmd **g, int n, int bg)
             }
             if (strcmp(curr->argv[0], "resume") == 0) {
                 exit(do_resume(curr->argv, curr->argc) == 0 ? 0 : 1);
+            }
+            if (strcmp(curr->argv[0], "ping") == 0) {
+                exit(do_ping(curr->argv, curr->argc) == 0 ? 0 : 1);
             }
 
             char runpath[2048];
