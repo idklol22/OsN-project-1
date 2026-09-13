@@ -29,5 +29,6 @@ void jobs_mark_stopped(pid_t pgid);
 void jobs_mark_running(pid_t pgid);
 void jobs_send_sighup_all(void);
 job_t *jobs_get_by_jid(int jid);
+void jobs_remove(pid_t pgid);
 
 #endif

@@ -137,6 +137,17 @@ job_t *jobs_get_by_jid(int jid)
     return NULL;
 }
 
+void jobs_remove(pid_t pgid)
+{
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (table[i].active && table[i].pgid == pgid) {
+            table[i].active = 0;
+            njobs--;
+            break;
+        }
+    }
+}
+
 void jobs_print_activities(void)
 {
     for (int i = 0; i < MAX_JOBS; i++) {
