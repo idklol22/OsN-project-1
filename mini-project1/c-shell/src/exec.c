@@ -149,6 +149,12 @@ static int run_pipeline(cmd **g, int n, int bg)
             if (pgid == 0) pgid = getpid();
             setpgid(0, pgid);
 
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTSTP, SIG_DFL);
+            signal(SIGTTIN, SIG_DFL);
+            signal(SIGTTOU, SIG_DFL);
+            signal(SIGCHLD, SIG_DFL);
+
             if (bg) {
                 int devnull = open("/dev/null", O_RDONLY);
                 if (devnull >= 0) {
@@ -299,14 +305,35 @@ static int run_pipeline(cmd **g, int n, int bg)
         }
     }
 
+    char full_cmd[1024] = {0};
+    for (int i = 0; i < n; i++) {
+        if (i > 0) strncat(full_cmd, " | ", sizeof(full_cmd) - strlen(full_cmd) - 1);
+        strncat(full_cmd, first_cmds[i], sizeof(full_cmd) - strlen(full_cmd) - 1);
+    }
+
     if (bg) {
-        int jid = jobs_add(pgid, pids, first_cmds, n);
+        int jid = jobs_add(pgid, pids, first_cmds, n, full_cmd);
         printf("[%d] %d\n", jid, (int)pids[0]);
         fflush(stdout);
     } else {
+        tcsetpgrp(STDIN_FILENO, pgid);
+
+        int stopped = 0;
         for (int i = 0; i < n; i++) {
             int st;
-            waitpid(pids[i], &st, 0);
+            waitpid(pids[i], &st, WUNTRACED);
+            if (WIFSTOPPED(st)) {
+                stopped = 1;
+            }
+        }
+
+        tcsetpgrp(STDIN_FILENO, getpgrp());
+
+        if (stopped) {
+            int jid = jobs_add(pgid, pids, first_cmds, n, full_cmd);
+            jobs_mark_stopped(pgid);
+            printf("[%d] + Stopped %s\n", jid, full_cmd);
+            fflush(stdout);
         }
     }
 

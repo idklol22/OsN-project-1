@@ -51,6 +51,22 @@ static void print_prompt(void)
     fflush(stdout);
 }
 
+static void sigint_handler(int sig)
+{
+    (void)sig;
+    printf("\n");
+    print_prompt();
+    fflush(stdout);
+}
+
+static void sigtstp_handler(int sig)
+{
+    (void)sig;
+    printf("\n");
+    print_prompt();
+    fflush(stdout);
+}
+
 static void sigchld_handler(int sig)
 {
     (void)sig;
@@ -64,6 +80,13 @@ int main(void)
         return 1;
     }
 
+    signal(SIGTTOU, SIG_IGN);
+    signal(SIGTTIN, SIG_IGN);
+
+    pid_t shell_pid = getpid();
+    setpgid(shell_pid, shell_pid);
+    tcsetpgrp(STDIN_FILENO, shell_pid);
+
     hop_init(homedir);
     jobs_init();
 
@@ -73,15 +96,36 @@ int main(void)
     sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
     sigaction(SIGCHLD, &sa, NULL);
 
+    struct sigaction sa_int;
+    sa_int.sa_handler = sigint_handler;
+    sigemptyset(&sa_int.sa_mask);
+    sa_int.sa_flags = SA_RESTART;
+    sigaction(SIGINT, &sa_int, NULL);
+
+    struct sigaction sa_tstp;
+    sa_tstp.sa_handler = sigtstp_handler;
+    sigemptyset(&sa_tstp.sa_mask);
+    sa_tstp.sa_flags = SA_RESTART;
+    sigaction(SIGTSTP, &sa_tstp, NULL);
+
     char line[shell_inmax];
+    int eof_warned = 0;
 
     while (1) {
         print_prompt();
 
         if (!fgets(line, sizeof(line), stdin)) {
+            if (jobs_has_stopped() && !eof_warned) {
+                printf("cshell: there are stopped jobs\n");
+                eof_warned = 1;
+                continue;
+            }
             printf("\n");
+            jobs_send_sighup_all();
             break;
         }
+
+        eof_warned = 0;
 
         size_t ln = strlen(line);
         if (ln > 0 && line[ln - 1] == '\n')

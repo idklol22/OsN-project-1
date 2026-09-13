@@ -18,7 +18,7 @@ void jobs_init(void)
     njobs = 0;
 }
 
-int jobs_add(pid_t pgid, pid_t *pids, char **cmds, int npids)
+int jobs_add(pid_t pgid, pid_t *pids, char **cmds, int npids, const char *cmdline)
 {
     if (njobs >= MAX_JOBS) return -1;
     int slot = -1;
@@ -32,6 +32,14 @@ int jobs_add(pid_t pgid, pid_t *pids, char **cmds, int npids)
     table[slot].pgid = pgid;
     table[slot].npids = npids < MAX_PIDS_PER_JOB ? npids : MAX_PIDS_PER_JOB;
     table[slot].active = 1;
+    table[slot].state = JOB_RUNNING;
+    if (cmdline) {
+        strncpy(table[slot].cmdline, cmdline, sizeof(table[slot].cmdline) - 1);
+        table[slot].cmdline[sizeof(table[slot].cmdline) - 1] = '\0';
+    } else {
+        table[slot].cmdline[0] = '\0';
+    }
+
     for (int i = 0; i < table[slot].npids; i++) {
         table[slot].pids[i] = pids[i];
         strncpy(table[slot].cmds[i], cmds[i], 255);
@@ -45,33 +53,88 @@ void jobs_reap(void)
 {
     int st;
     pid_t p;
-    while ((p = waitpid(-1, &st, WNOHANG)) > 0) {
+    while ((p = waitpid(-1, &st, WNOHANG | WUNTRACED | WCONTINUED)) > 0) {
         for (int i = 0; i < MAX_JOBS; i++) {
             if (!table[i].active) continue;
             for (int j = 0; j < table[i].npids; j++) {
                 if (table[i].pids[j] == p) {
-                    char *cmd = table[i].cmds[j];
-                    if (WIFEXITED(st)) {
-                        printf("\n%s with pid %d exited normally\n", cmd, (int)p);
-                    } else {
-                        printf("\n%s with pid %d exited abnormally\n", cmd, (int)p);
-                    }
-                    fflush(stdout);
-                    table[i].pids[j] = -1;
+                    if (WIFSTOPPED(st)) {
+                        table[i].state = JOB_STOPPED;
+                    } else if (WIFCONTINUED(st)) {
+                        table[i].state = JOB_RUNNING;
+                    } else if (WIFEXITED(st) || WIFSIGNALED(st)) {
+                        char *cmd = table[i].cmds[j];
+                        if (WIFEXITED(st)) {
+                            printf("\n%s with pid %d exited normally\n", cmd, (int)p);
+                        } else {
+                            printf("\n%s with pid %d exited abnormally\n", cmd, (int)p);
+                        }
+                        fflush(stdout);
+                        table[i].pids[j] = -1;
 
-                    int all_done = 1;
-                    for (int k = 0; k < table[i].npids; k++) {
-                        if (table[i].pids[k] > 0) { all_done = 0; break; }
-                    }
-                    if (all_done) {
-                        table[i].active = 0;
-                        njobs--;
+                        int all_done = 1;
+                        for (int k = 0; k < table[i].npids; k++) {
+                            if (table[i].pids[k] > 0) { all_done = 0; break; }
+                        }
+                        if (all_done) {
+                            table[i].active = 0;
+                            njobs--;
+                        }
                     }
                     break;
                 }
             }
         }
     }
+}
+
+int jobs_has_stopped(void)
+{
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (table[i].active && table[i].state == JOB_STOPPED) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void jobs_mark_stopped(pid_t pgid)
+{
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (table[i].active && table[i].pgid == pgid) {
+            table[i].state = JOB_STOPPED;
+            break;
+        }
+    }
+}
+
+void jobs_mark_running(pid_t pgid)
+{
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (table[i].active && table[i].pgid == pgid) {
+            table[i].state = JOB_RUNNING;
+            break;
+        }
+    }
+}
+
+void jobs_send_sighup_all(void)
+{
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (table[i].active && table[i].pgid > 0) {
+            kill(-table[i].pgid, SIGHUP);
+        }
+    }
+}
+
+job_t *jobs_get_by_jid(int jid)
+{
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (table[i].active && table[i].jid == jid) {
+            return &table[i];
+        }
+    }
+    return NULL;
 }
 
 void jobs_print_activities(void)
@@ -102,7 +165,7 @@ void jobs_print_activities(void)
                     state_ch = st_c;
                 fclose(f);
             }
-            const char *state = (state_ch == 'T') ? "Stopped" : "Running";
+            const char *state = (state_ch == 'T' || table[i].state == JOB_STOPPED) ? "Stopped" : "Running";
             printf("  %d %s  %s\n", (int)p, table[i].cmds[j], state);
         }
     }
