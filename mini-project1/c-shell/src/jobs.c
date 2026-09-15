@@ -129,6 +129,7 @@ void jobs_send_sighup_all(void)
 
 job_t *jobs_get_by_jid(int jid)
 {
+    if (jid <= 0) return NULL;
     for (int i = 0; i < MAX_JOBS; i++) {
         if (table[i].active && table[i].jid == jid) {
             return &table[i];
@@ -146,6 +147,18 @@ void jobs_remove(pid_t pgid)
             break;
         }
     }
+}
+
+int jobs_contains_pid(pid_t pid)
+{
+    if (pid <= 0) return 0;
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (!table[i].active) continue;
+        for (int j = 0; j < table[i].npids; j++) {
+            if (table[i].pids[j] == pid) return 1;
+        }
+    }
+    return 0;
 }
 
 void jobs_print_activities(void)
