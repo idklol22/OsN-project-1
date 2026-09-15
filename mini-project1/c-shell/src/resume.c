@@ -92,6 +92,8 @@ int do_resume(char **argv, int argc)
             if (waitpid(job->pids[i], &st, WUNTRACED) > 0) {
                 if (WIFSTOPPED(st)) {
                     stopped = 1;
+                } else if (WIFEXITED(st) || WIFSIGNALED(st)) {
+                    job->pids[i] = -1;
                 }
             }
         }
@@ -111,6 +113,14 @@ int do_resume(char **argv, int argc)
             jobs_mark_stopped(job->pgid);
             printf("[%d] + Stopped %s\n", job->jid, job->cmdline[0] ? job->cmdline : job->cmds[0]);
             fflush(stdout);
+        } else {
+            int all_done = 1;
+            for (int i = 0; i < job->npids; i++) {
+                if (job->pids[i] > 0) { all_done = 0; break; }
+            }
+            if (all_done) {
+                jobs_remove(job->pgid);
+            }
         }
 
         return 0;

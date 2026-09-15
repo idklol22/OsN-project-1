@@ -84,15 +84,7 @@ static void do_flat(const char *base, int show_hidden)
     qsort(names, (size_t)cnt, sizeof(char *), cmp_ent);
 
     for (int i = 0; i < cnt; i++) {
-        char full[PATH_MAX];
-        snprintf(full, sizeof(full), "%s/%s", base, names[i]);
-        struct stat st;
-        int is_dir = 0;
-        if (stat(full, &st) == 0 && S_ISDIR(st.st_mode)) is_dir = 1;
-        if (is_dir)
-            printf("%s/\n", names[i]);
-        else
-            printf("%s\n", names[i]);
+        printf("%s\n", names[i]);
         free(names[i]);
     }
     free(names);

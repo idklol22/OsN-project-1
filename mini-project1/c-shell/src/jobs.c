@@ -65,9 +65,9 @@ void jobs_reap(void)
                     } else if (WIFEXITED(st) || WIFSIGNALED(st)) {
                         char *cmd = table[i].cmds[j];
                         if (WIFEXITED(st)) {
-                            printf("\n%s with pid %d exited normally\n", cmd, (int)p);
+                            printf("%s with pid %d exited normally\n", cmd, (int)p);
                         } else {
-                            printf("\n%s with pid %d exited abnormally\n", cmd, (int)p);
+                            printf("%s with pid %d exited abnormally\n", cmd, (int)p);
                         }
                         fflush(stdout);
                         table[i].pids[j] = -1;
@@ -161,8 +161,18 @@ int jobs_contains_pid(pid_t pid)
     return 0;
 }
 
+static int cmp_jobs(const void *a, const void *b)
+{
+    const job_t *ja = *(const job_t **)a;
+    const job_t *jb = *(const job_t **)b;
+    return ja->jid - jb->jid;
+}
+
 void jobs_print_activities(void)
 {
+    job_t *active_jobs[MAX_JOBS];
+    int count = 0;
+
     for (int i = 0; i < MAX_JOBS; i++) {
         if (!table[i].active) continue;
 
@@ -170,11 +180,18 @@ void jobs_print_activities(void)
         for (int j = 0; j < table[i].npids; j++) {
             if (table[i].pids[j] > 0) { alive = 1; break; }
         }
-        if (!alive) continue;
+        if (alive) {
+            active_jobs[count++] = &table[i];
+        }
+    }
 
-        printf("[%d] pgid %d\n", table[i].jid, (int)table[i].pgid);
-        for (int j = 0; j < table[i].npids; j++) {
-            pid_t p = table[i].pids[j];
+    qsort(active_jobs, count, sizeof(job_t *), cmp_jobs);
+
+    for (int k = 0; k < count; k++) {
+        job_t *job = active_jobs[k];
+        printf("[%d] pgid %d\n", job->jid, (int)job->pgid);
+        for (int j = 0; j < job->npids; j++) {
+            pid_t p = job->pids[j];
             if (p <= 0) continue;
 
             char state_ch = '?';
@@ -189,8 +206,9 @@ void jobs_print_activities(void)
                     state_ch = st_c;
                 fclose(f);
             }
-            const char *state = (state_ch == 'T' || table[i].state == JOB_STOPPED) ? "Stopped" : "Running";
-            printf("  %d %s  %s\n", (int)p, table[i].cmds[j], state);
+            const char *state = (state_ch == 'T' || job->state == JOB_STOPPED) ? "Stopped" : "Running";
+            printf("  %d %s %s\n", (int)p, job->cmds[j], state);
         }
     }
+    fflush(stdout);
 }

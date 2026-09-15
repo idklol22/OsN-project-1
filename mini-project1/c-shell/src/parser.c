@@ -75,7 +75,6 @@ static int do_arg(cmd *cur)
     if (tt == tok_semi) {
         eat();
         cur->sep = sep_semi;
-        if (pk()->type == tok_eof) return 0;
         cmd *nc = do_cmd();
         if (!nc) return -1;
         cur->nxt = nc;

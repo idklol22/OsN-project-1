@@ -61,12 +61,11 @@ static void reverse_lb(linebuf *lb)
     }
 }
 
-static void read_forward(int fd, linebuf *lb)
+static void read_forward(int fd, linebuf *lb, int *lineno)
 {
     char buf[CHUNK];
     char *cur = NULL;
     int clen = 0, ccap = 0;
-    int lineno = 1;
 
     ssize_t n;
     while ((n = read(fd, buf, CHUNK)) > 0) {
@@ -79,8 +78,7 @@ static void read_forward(int fd, linebuf *lb)
                 }
                 cur[clen] = '\0';
                 int is_empty = (clen == 0);
-                lb_push(lb, strdup(cur), is_empty ? 0 : lineno);
-                if (!is_empty) lineno++;
+                lb_push(lb, strdup(cur), is_empty ? 0 : (*lineno)++);
                 clen = 0;
             } else {
                 if (clen + 2 > ccap) {
@@ -93,7 +91,7 @@ static void read_forward(int fd, linebuf *lb)
     }
     if (clen > 0) {
         cur[clen] = '\0';
-        lb_push(lb, strdup(cur), lineno);
+        lb_push(lb, strdup(cur), (*lineno)++);
     }
     free(cur);
 }
@@ -157,14 +155,14 @@ static int read_seekable_reverse(int fd, linebuf *lb)
     return 0;
 }
 
-static int process_fd(int fd, int flag_r, int flag_n, int is_seekable)
+static int process_fd(int fd, int flag_r, int flag_n, int is_seekable, int *lineno)
 {
     linebuf lb = {0};
 
     if (flag_r && is_seekable && !flag_n) {
         if (read_seekable_reverse(fd, &lb) < 0) { lb_free(&lb); return -1; }
     } else {
-        read_forward(fd, &lb);
+        read_forward(fd, &lb, lineno);
         if (flag_r) reverse_lb(&lb);
     }
 
@@ -193,8 +191,10 @@ int do_peek(char **argv, int argc)
         }
     }
 
+    int lineno = 1;
+
     if (n_files == 0) {
-        process_fd(STDIN_FILENO, flag_r, flag_n, 0);
+        process_fd(STDIN_FILENO, flag_r, flag_n, 0, &lineno);
         return 0;
     }
 
@@ -204,7 +204,7 @@ int do_peek(char **argv, int argc)
         if (arg[0] == '-' && arg[1] != '\0') continue;
 
         if (strcmp(arg, "-") == 0) {
-            process_fd(STDIN_FILENO, flag_r, flag_n, 0);
+            process_fd(STDIN_FILENO, flag_r, flag_n, 0, &lineno);
             continue;
         }
 
@@ -228,7 +228,7 @@ int do_peek(char **argv, int argc)
         }
 
         int seekable = S_ISREG(st.st_mode);
-        process_fd(fd, flag_r, flag_n, seekable);
+        process_fd(fd, flag_r, flag_n, seekable, &lineno);
         close(fd);
     }
 

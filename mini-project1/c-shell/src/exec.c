@@ -14,8 +14,10 @@
 #include "jobs.h"
 #include "resume.h"
 #include "ping.h"
+#include "spy.h"
+#include "snoop.h"
 
-static int find_exec(char *name, char *out, size_t sz)
+int find_exec(char *name, char *out, size_t sz)
 {
     if (strchr(name, '/') != NULL) {
         strncpy(out, name, sz - 1);
@@ -72,6 +74,8 @@ static int is_builtin(char *name)
     if (strcmp(name, "activities") == 0) return 1;
     if (strcmp(name, "resume") == 0) return 1;
     if (strcmp(name, "ping") == 0) return 1;
+    if (strcmp(name, "spy") == 0) return 1;
+    if (strcmp(name, "snoop") == 0) return 1;
     return 0;
 }
 
@@ -100,10 +104,9 @@ static int run_pipeline(cmd **g, int n, int bg)
         }
     }
 
-    for (int i = 0; i < n; i++) {
-        cmd *curr = g[i];
-        if (!curr->argv || !curr->argv[0]) continue;
-        if (!is_builtin(curr->argv[0])) {
+    if (n == 1) {
+        cmd *curr = g[0];
+        if (curr->argv && curr->argv[0] && !is_builtin(curr->argv[0])) {
             char runpath[2048];
             if (!find_exec(curr->argv[0], runpath, sizeof(runpath))) {
                 char *err_name = curr->argv[0];
@@ -119,18 +122,28 @@ static int run_pipeline(cmd **g, int n, int bg)
         return 0;
     }
 
-    if (!bg && n == 1 && strcmp(g[0]->argv[0], "activities") == 0) {
+    if (!bg && n == 1 && g[0]->redirs == NULL && strcmp(g[0]->argv[0], "activities") == 0) {
         jobs_print_activities();
         return 0;
     }
 
-    if (!bg && n == 1 && strcmp(g[0]->argv[0], "resume") == 0) {
+    if (!bg && n == 1 && g[0]->redirs == NULL && strcmp(g[0]->argv[0], "resume") == 0) {
         do_resume(g[0]->argv, g[0]->argc);
         return 0;
     }
 
-    if (!bg && n == 1 && strcmp(g[0]->argv[0], "ping") == 0) {
+    if (!bg && n == 1 && g[0]->redirs == NULL && strcmp(g[0]->argv[0], "ping") == 0) {
         do_ping(g[0]->argv, g[0]->argc);
+        return 0;
+    }
+
+    if (!bg && n == 1 && g[0]->redirs == NULL && strcmp(g[0]->argv[0], "spy") == 0) {
+        do_spy(g[0]->argv, g[0]->argc);
+        return 0;
+    }
+
+    if (!bg && n == 1 && g[0]->redirs == NULL && strcmp(g[0]->argv[0], "snoop") == 0) {
+        do_snoop(g[0]->argv, g[0]->argc);
         return 0;
     }
 
@@ -300,9 +313,20 @@ static int run_pipeline(cmd **g, int n, int bg)
             if (strcmp(curr->argv[0], "ping") == 0) {
                 exit(do_ping(curr->argv, curr->argc) == 0 ? 0 : 1);
             }
+            if (strcmp(curr->argv[0], "spy") == 0) {
+                exit(do_spy(curr->argv, curr->argc) == 0 ? 0 : 1);
+            }
+            if (strcmp(curr->argv[0], "snoop") == 0) {
+                exit(do_snoop(curr->argv, curr->argc) == 0 ? 0 : 1);
+            }
 
             char runpath[2048];
-            find_exec(curr->argv[0], runpath, sizeof(runpath));
+            if (!find_exec(curr->argv[0], runpath, sizeof(runpath))) {
+                char *err_name = curr->argv[0];
+                if (err_name[0] == '%' && !strchr(err_name, '/')) err_name++;
+                fprintf(stderr, "cshell: command not found (%s)\n", err_name);
+                exit(1);
+            }
 
             if (curr->argv[0][0] == '%' && !strchr(curr->argv[0], '/'))
                 curr->argv[0] = curr->argv[0] + 1;
@@ -336,6 +360,11 @@ static int run_pipeline(cmd **g, int n, int bg)
         printf("[%d] %d\n", jid, (int)pids[0]);
         fflush(stdout);
     } else {
+        sigset_t chld_mask, old_mask;
+        sigemptyset(&chld_mask);
+        sigaddset(&chld_mask, SIGCHLD);
+        sigprocmask(SIG_BLOCK, &chld_mask, &old_mask);
+
         tcsetpgrp(STDIN_FILENO, pgid);
 
         int stopped = 0;
@@ -355,6 +384,8 @@ static int run_pipeline(cmd **g, int n, int bg)
             printf("[%d] + Stopped %s\n", jid, full_cmd);
             fflush(stdout);
         }
+
+        sigprocmask(SIG_SETMASK, &old_mask, NULL);
     }
 
     free(pids);
